@@ -42,6 +42,19 @@ def get_users() -> jsonify:
     return jsonify(Database.get_users_without_passwords()), 200
 
 
+@app.route("/api/users/me", methods=["GET"])
+@jwt_required
+def get_current_user() -> jsonify:
+    """Return the currently authenticated user without the password."""
+    user = dict(g.user) if hasattr(g, "user") else None
+    if user is None:
+        return jsonify({"message": "User not found."}), 404
+    # Remove password before returning
+    if "password" in user:
+        del user["password"]
+    return jsonify(user), 200
+
+
 @app.route("/api/users", methods=["POST"])
 @jwt_required
 @admin_required

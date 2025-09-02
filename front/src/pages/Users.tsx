@@ -21,6 +21,9 @@ export function UsersPage({ authToken, onLogout }: UsersPageProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [confirmLogout, setConfirmLogout] = useState(false);
+  //added a new state for the current user
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+
 
   // New state for toast-style notifications
   const [notification, setNotification] = useState<string | null>(null);
@@ -50,6 +53,25 @@ export function UsersPage({ authToken, onLogout }: UsersPageProps) {
   useEffect(() => {
     fetchUsers();
   }, [authToken]);
+
+  const fetchCurrentUser = async () => {
+    try {
+      const response = await fetch('/api/users/me', {
+        headers: { 'Authorization': `Bearer ${authToken}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch current user');
+      const data: User = await response.json();
+      setCurrentUser(data);
+    } catch (err) {
+      setNotification((err as Error).message);
+    }
+  };
+  
+  useEffect(() => {
+    fetchUsers();
+    fetchCurrentUser();
+  }, [authToken]);
+  
 
   const handleDeleteUser = async () => {
     if (!userToDelete) return;
@@ -101,7 +123,8 @@ export function UsersPage({ authToken, onLogout }: UsersPageProps) {
         <UserTable
           users={users}
           onDeleteClick={(user) => setUserToDelete(user)}
-        />
+          currentUser={currentUser}
+          />
       )}
 
       {isModalOpen && (
@@ -181,7 +204,15 @@ function Toolbar({ onOpenCreateModal }: { onOpenCreateModal: () => void }) {
 }
 
 // Table to display users
-function UserTable({ users, onDeleteClick }: { users: User[]; onDeleteClick: (user: User) => void; }) {
+function UserTable({
+  users,
+  onDeleteClick,
+  currentUser,
+}: {
+  users: User[];
+  onDeleteClick: (user: User) => void;
+  currentUser: User | null;
+}) {
   return (
     <table className="users-table">
       <thead>
@@ -193,22 +224,31 @@ function UserTable({ users, onDeleteClick }: { users: User[]; onDeleteClick: (us
         </tr>
       </thead>
       <tbody>
-        {users.map((user) => (
-          <tr key={user.uuid}>
-            <td>{user.uuid}</td>
-            <td>{user.username}</td>
-            <td>{user.role}</td>
-            <td className="actions-column">
-              <button onClick={() => onDeleteClick(user)} className="delete-button">
-                Delete
-              </button>
-            </td>
-          </tr>
-        ))}
+        {users.map((user) => {
+          const isSelf = currentUser?.uuid === user.uuid;
+          return (
+            <tr key={user.uuid}>
+              <td>{user.uuid}</td>
+              <td>{user.username}</td>
+              <td>{user.role}</td>
+              <td className="actions-column">
+                {!isSelf && (
+                  <button
+                    onClick={() => onDeleteClick(user)}
+                    className="delete-button"
+                  >
+                    Delete
+                  </button>
+                )}
+              </td>
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );
 }
+
 
 // Modal for the user creation form
 interface CreateUserModalProps {
