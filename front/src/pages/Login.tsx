@@ -1,6 +1,7 @@
-import { useState, type FormEvent } from 'react';
-import './Login.css';
-import './Users.css';
+import { useState, type FormEvent, useContext } from 'react';
+import { Box, Paper, Typography, TextField, Button, Alert } from '@mui/material';
+import api from '../api';
+import { AuthContext } from '../AuthContext';
 
 // Props for the component, including a callback for when login is successful
 interface LoginPageProps {
@@ -13,6 +14,7 @@ export function LoginPage({ onLoginSuccess }: LoginPageProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const { login } = useContext(AuthContext);
 
   // Handles the form submission
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -21,65 +23,33 @@ export function LoginPage({ onLoginSuccess }: LoginPageProps) {
     setError(null);
 
     try {
-      const response = await fetch('/api/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ username, password }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        // If response is not OK, throw an error with the message from the backend
-        throw new Error(data.message || 'Failed to log in');
-      }
-
-      // On success, call the parent component's onLoginSuccess function
-      if (data.token) {
-        onLoginSuccess(data.token, data.role);
-      }
-
+      const resp = await api.post('/login', { username, password });
+      const data = resp.data;
+      if (!resp.status || !data.token) throw new Error(data.message || 'Failed to log in');
+      login(data.token);
+      onLoginSuccess(data.token, data.role);
     } catch (err) {
-      // Handle network errors or errors thrown from the response check
-      setError((err as Error).message);
+      setError((err as any)?.response?.data?.message || (err as Error).message || 'Network error');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="login-page-container">
-      <div className="login-form-container">
-        <h2>Admin Login</h2>
+    <Box sx={{ minHeight: '80vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <Paper sx={{ p: 4, width: 420 }} elevation={4}>
+        <Typography variant="h5" align="center" gutterBottom>
+          Admin Login
+        </Typography>
+        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
         <form onSubmit={handleSubmit}>
-          <div className="input-group">
-            <label htmlFor="username">Username</label>
-            <input
-              id="username"
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-            />
-          </div>
-          <div className="input-group">
-            <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-          {error && <p className="error-message">{error}</p>}
-          <button type="submit" disabled={isLoading}>
+          <TextField label="Username" value={username} onChange={(e) => setUsername(e.target.value)} fullWidth sx={{ mb: 2 }} required />
+          <TextField label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} fullWidth sx={{ mb: 2 }} required />
+          <Button type="submit" variant="contained" color="primary" fullWidth disabled={isLoading}>
             {isLoading ? 'Logging in...' : 'Login'}
-          </button>
+          </Button>
         </form>
-      </div>
-    </div>
+      </Paper>
+    </Box>
   );
 }

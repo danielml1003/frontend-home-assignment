@@ -1,343 +1,198 @@
-import { useState, useEffect, type FormEvent } from 'react';
-import './Users.css';
+import { useState, useEffect, type FormEvent, useContext } from 'react';
+import {
+  Box,
+  Paper,
+  Typography,
+  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Select,
+  MenuItem,
+  Alert,
+  CircularProgress,
+} from '@mui/material';
+import DeleteIcon from '@mui/icons-material/Delete';
+import AddIcon from '@mui/icons-material/Add';
+import api from '../api';
+import { AuthContext } from '../AuthContext';
 
-// The User type definition
 interface User {
   uuid: string;
   username: string;
   role: 'user' | 'admin';
 }
 
-interface UsersPageProps {
-  authToken: string;
-  onLogout: () => void;
-}
-
-// Main component for the entire page
-export function UsersPage({ authToken, onLogout }: UsersPageProps) {
+export function UsersPage({ onLogout }: { onLogout: () => void }) {
   const [users, setUsers] = useState<User[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [userToDelete, setUserToDelete] = useState<User | null>(null);
-  const [confirmLogout, setConfirmLogout] = useState(false);
-  //added a new state for the current user
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-
-
-  // New state for toast-style notifications
+  const [createOpen, setCreateOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const { token } = useContext(AuthContext);
 
-  const fetchUsers = async () => {
-    setIsLoading(true);
+  const load = async () => {
+    setLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/users', {
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-        },
-      });
-      if (!response.ok) {
-        throw new Error('Failed to fetch users. You may not have permission.');
-      }
-      const data: User[] = await response.json();
-      setUsers(data);
+      const resp = await api.get('/users');
+      setUsers(resp.data || []);
     } catch (err) {
-      // Use the main error state for critical fetch failures
-      setError((err as Error).message);
+      setError((err as any)?.response?.data?.message || (err as Error).message || 'Failed to fetch users');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchUsers();
-  }, [authToken]);
-
-  const fetchCurrentUser = async () => {
+  const loadCurrent = async () => {
     try {
-      const response = await fetch('/api/users/me', {
-        headers: { 'Authorization': `Bearer ${authToken}` },
-      });
-      if (!response.ok) throw new Error('Failed to fetch current user');
-      const data: User = await response.json();
-      setCurrentUser(data);
+      const resp = await api.get('/users/me');
+      setCurrentUser(resp.data);
     } catch (err) {
-      setNotification((err as Error).message);
+      setNotification((err as any)?.response?.data?.message || (err as Error).message || 'Failed to fetch current user');
     }
   };
-  
+
   useEffect(() => {
-    fetchUsers();
-    fetchCurrentUser();
-  }, [authToken]);
-  
+    load();
+    loadCurrent();
+  }, [token]);
 
-  const handleDeleteUser = async () => {
-    if (!userToDelete) return;
-
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      const response = await fetch(`/api/users/${userToDelete.uuid}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-        },
-      });
-
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to delete user.');
-      }
-
-      setUserToDelete(null); // Close the confirmation modal
-      fetchUsers(); // Refresh the user list
-
+      await api.delete(`/users/${deleteTarget.uuid}`);
+      setNotification('User deleted');
+      setDeleteTarget(null);
+      await load();
     } catch (err) {
-      // For non-critical errors, show a notification instead of replacing the page
-      setNotification((err as Error).message);
-      setUserToDelete(null); // Close modal on error
+      setNotification((err as any)?.response?.data?.message || (err as Error).message || 'Failed to delete');
+      setDeleteTarget(null);
     }
   };
 
   return (
-    <div className="users-page-container">
-      {/* Render the notification if one exists */}
-      {notification && <Notification message={notification} onClose={() => setNotification(null)} />}
+    <Box>
+      <Paper sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h6">User Management</Typography>
+        <Box>
+          <Button variant="outlined" sx={{ mr: 2 }} onClick={() => setCreateOpen(true)} startIcon={<AddIcon />}>Create New User</Button>
+          <Button variant="contained" color="secondary" onClick={onLogout}>Logout</Button>
+        </Box>
+      </Paper>
 
-      <header className="users-page-header">
-        <h1>User Management</h1>
-        <button onClick={() => setConfirmLogout(true)} className="logout-button">
-          Logout
-        </button>
-      </header>
+      {notification && <Alert severity="info" onClose={() => setNotification(null)} sx={{ mb: 2 }}>{notification}</Alert>}
 
-      <Toolbar onOpenCreateModal={() => setIsModalOpen(true)} />
-
-      {isLoading && <p>Loading users...</p>}
-      {/* The main error message is only for critical load failures */}
-      {error && <p className="error-message">{error}</p>}
-
-      {/* The table is no longer hidden by non-critical errors */}
-      {!isLoading && !error && (
-        <UserTable
-          users={users}
-          onDeleteClick={(user) => setUserToDelete(user)}
-          currentUser={currentUser}
-          />
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress /></Box>
+      ) : error ? (
+        <Alert severity="error">{error}</Alert>
+      ) : (
+        <TableContainer component={Paper} sx={{ overflow: 'hidden' }}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>UUID</TableCell>
+                <TableCell>Username</TableCell>
+                <TableCell>Role</TableCell>
+                <TableCell align="center">Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {users.map((u) => {
+                const isSelf = currentUser?.uuid === u.uuid;
+                return (
+                  <TableRow key={u.uuid} hover>
+                    <TableCell sx={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.uuid}</TableCell>
+                    <TableCell>{u.username}</TableCell>
+                    <TableCell>{u.role}</TableCell>
+                    <TableCell align="center">
+                      {!isSelf && (
+                        <IconButton color="error" onClick={() => setDeleteTarget(u)}>
+                          <DeleteIcon />
+                        </IconButton>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </TableContainer>
       )}
 
-      {isModalOpen && (
-        <CreateUserModal
-          authToken={authToken}
-          onClose={() => setIsModalOpen(false)}
-          onUserCreated={() => {
-            setIsModalOpen(false);
-            fetchUsers();
-          }}
-        />
-      )}
+      <CreateUserDialog open={createOpen} onClose={() => setCreateOpen(false)} onCreated={async () => { setCreateOpen(false); await load(); setNotification('User created'); }} />
 
-      {userToDelete && (
-        <ConfirmDeleteModal
-          user={userToDelete}
-          onConfirm={handleDeleteUser}
-          onCancel={() => setUserToDelete(null)}
-        />
-      )}
-
-      {confirmLogout && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <h2>Confirm Logout</h2>
-            <p>Are you sure you want to log out?</p>
-            <div className="modal-actions">
-              <button
-                type="button"
-                onClick={() => setConfirmLogout(false)}
-                className="button-secondary"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={onLogout}
-                className="logout-button"
-              >
-                Log Out
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-
-    </div>
+      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)}>
+        <DialogTitle>Confirm Deletion</DialogTitle>
+        <DialogContent>
+          Are you sure you want to delete "{deleteTarget?.username}"? This action cannot be undone.
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteTarget(null)}>Cancel</Button>
+          <Button color="error" onClick={handleDelete}>Delete</Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
   );
 }
 
-// --- Helper Components ---
-
-// Notification component
-function Notification({ message, onClose }: { message: string; onClose: () => void; }) {
-  // Automatically close the notification after 5 seconds
-  useEffect(() => {
-    const timer = setTimeout(onClose, 5000);
-    return () => clearTimeout(timer);
-  }, [onClose]);
-
-  return (
-    <div className="notification error">
-      <p>{message}</p>
-      <button onClick={onClose} className="close-button">&times;</button>
-    </div>
-  );
-}
-
-// Toolbar with the "Create User" button
-function Toolbar({ onOpenCreateModal }: { onOpenCreateModal: () => void }) {
-  return (
-    <div className="toolbar">
-      <button onClick={onOpenCreateModal}>Create New User</button>
-    </div>
-  );
-}
-
-// Table to display users
-function UserTable({
-  users,
-  onDeleteClick,
-  currentUser,
-}: {
-  users: User[];
-  onDeleteClick: (user: User) => void;
-  currentUser: User | null;
-}) {
-  return (
-    <table className="users-table">
-      <thead>
-        <tr>
-          <th>UUID</th>
-          <th>Username</th>
-          <th>Role</th>
-          <th className="actions-column">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {users.map((user) => {
-          const isSelf = currentUser?.uuid === user.uuid;
-          return (
-            <tr key={user.uuid}>
-              <td>{user.uuid}</td>
-              <td>{user.username}</td>
-              <td>{user.role}</td>
-              <td className="actions-column">
-                {!isSelf && (
-                  <button
-                    onClick={() => onDeleteClick(user)}
-                    className="delete-button"
-                  >
-                    Delete
-                  </button>
-                )}
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
-  );
-}
-
-
-// Modal for the user creation form
-interface CreateUserModalProps {
-  authToken: string;
-  onClose: () => void;
-  onUserCreated: () => void;
-}
-
-function CreateUserModal({ authToken, onClose, onUserCreated }: CreateUserModalProps) {
+function CreateUserDialog({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void; }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'user' | 'admin'>('user');
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setIsSubmitting(true);
+  const submit = async (e?: FormEvent) => {
+    e?.preventDefault();
+    setLoading(true);
     setError(null);
-
     try {
-      const response = await fetch('/api/users', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({ username, password, role }),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to create user.');
+      const resp = await api.post('/users', { username, password, role });
+      // backend returns created user
+      if (resp.status === 201) {
+        onCreated();
+      } else {
+        setError('Failed to create user');
       }
-      onUserCreated();
     } catch (err) {
-      setError((err as Error).message);
+      setError((err as any)?.response?.data?.message || (err as Error).message || 'Failed');
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
   };
 
   return (
-    <div className="modal-overlay">
-      <div className="modal-content">
-        <h2>Create New User</h2>
-        <form onSubmit={handleSubmit}>
-          <div className="input-group">
-            <label htmlFor="new-username">Username</label>
-            <input id="new-username" type="text" value={username} onChange={(e) => setUsername(e.target.value)} required />
-          </div>
-          <div className="input-group">
-            <label htmlFor="new-password">Password</label>
-            <input id="new-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-          </div>
-          <div className="input-group">
-            <label htmlFor="new-role">Role</label>
-            <select id="new-role" value={role} onChange={(e) => setRole(e.target.value as 'user' | 'admin')}>
-              <option value="user">User</option>
-              <option value="admin">Admin</option>
-            </select>
-          </div>
-          {error && <p className="error-message">{error}</p>}
-          <div className="modal-actions">
-            <button type="button" onClick={onClose} className="button-secondary">Cancel</button>
-            <button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Creating...' : 'Create User'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <Dialog open={open} onClose={onClose} fullWidth>
+      <DialogTitle>Create New User</DialogTitle>
+      <DialogContent>
+        {error && <Alert severity="error">{error}</Alert>}
+        <Box component="form" onSubmit={submit} sx={{ mt: 1 }}>
+          <TextField label="Username" value={username} onChange={(e) => setUsername(e.target.value)} fullWidth sx={{ mb: 2 }} required />
+          <TextField label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} fullWidth sx={{ mb: 2 }} required />
+          <Select value={role} onChange={(e) => setRole(e.target.value as any)} fullWidth>
+            <MenuItem value="user">User</MenuItem>
+            <MenuItem value="admin">Admin</MenuItem>
+          </Select>
+        </Box>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button disabled={loading} onClick={submit} variant="contained">{loading ? 'Creating...' : 'Create User'}</Button>
+      </DialogActions>
+    </Dialog>
   );
 }
 
-// Component for confirming deletion
-function ConfirmDeleteModal({ user, onConfirm, onCancel }: { user: User; onConfirm: () => void; onCancel: () => void; }) {
-  return (
-    <div className="modal-overlay">
-      <div className="modal-content">
-        <h2>Confirm Deletion</h2>
-        <p>
-          Are you sure you want to delete the user "<strong>{user.username}</strong>"?
-          This action cannot be undone.
-        </p>
-        <div className="modal-actions">
-          <button type="button" onClick={onCancel} className="button-secondary">Cancel</button>
-          <button type="button" onClick={onConfirm} className="delete-button">Delete</button>
-        </div>
-      </div>
-    </div>
-  );
-}
