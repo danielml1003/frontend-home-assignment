@@ -1,8 +1,10 @@
 import React, { useContext } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import { ThemeProvider, CssBaseline, Container } from '@mui/material';
+import { ThemeProvider, CssBaseline, Box } from '@mui/material';
 import { LoginPage } from './pages/Login';
 import { UsersPage } from './pages/Users';
+import MyAccount from './pages/MyAccount';
+import Layout from './Layout';
 import theme from './theme';
 import { AuthProvider, AuthContext } from './AuthContext';
 
@@ -23,17 +25,35 @@ function AppRoutes() {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Box sx={{ width: '100%', py: 4, px: 2 }}>
       <Routes>
         <Route path="/login" element={<LoginPage onLoginSuccess={handleLoginSuccess} />} />
+
+        {/* Protected routes */}
         <Route
-          path="/users"
-          element={token ? <UsersPage onLogout={handleLogout} /> : <Navigate to="/login" />}
+          path="/*"
+          element={token ? (
+            <Layout>
+              <Routes>
+                <Route path="account" element={<MyAccount />} />
+                <Route path="users" element={<AdminRoute onLogout={handleLogout} />} />
+                <Route path="" element={<Navigate to="/account" />} />
+              </Routes>
+            </Layout>
+          ) : (
+            <Navigate to="/login" />
+          )}
         />
-        <Route path="*" element={<Navigate to={token ? '/users' : '/login'} />} />
+
       </Routes>
-    </Container>
+  </Box>
   );
+}
+
+function AdminRoute({ onLogout }: { onLogout: () => void }) {
+  const { user } = useContext(AuthContext);
+  if (user?.role !== 'admin') return <Navigate to="/account" />;
+  return <UsersPage onLogout={onLogout} />;
 }
 
 function App() {

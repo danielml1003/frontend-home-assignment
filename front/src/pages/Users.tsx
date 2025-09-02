@@ -84,7 +84,7 @@ export function UsersPage({ onLogout }: { onLogout: () => void }) {
 
   return (
     <Box>
-      <Paper sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+  <Paper sx={{ p: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h6">User Management</Typography>
         <Box>
           <Button variant="outlined" sx={{ mr: 2 }} onClick={() => setCreateOpen(true)} startIcon={<AddIcon />}>Create New User</Button>
